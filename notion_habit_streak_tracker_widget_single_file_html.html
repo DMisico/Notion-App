@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Habit / Streak Tracker</title>
+  <style>
+    :root{
+      --bg: #0b0c10;
+      --panel: #111318;
+      --muted: #788195;
+      --text: #e8ecf1;
+      --accent: #7C5CFF; /* change via URL ?accent=%23FF4D4D */
+      --ok: #2ecc71;
+      --warn:#ffb020;
+      --danger:#ff4d4f;
+      --shadow: 0 10px 25px rgba(0,0,0,.25);
+      --radius: 16px;
+    }
+    @media (prefers-color-scheme: light){
+      :root{
+        --bg:#f6f7fb; --panel:#ffffff; --text:#0f172a; --muted:#6b7280; --shadow: 0 8px 20px rgba(2,6,23,.08)
+      }
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, "Helvetica Neue", Arial, "Apple Color Emoji","Segoe UI Emoji";
+      color:var(--text); background:linear-gradient(180deg, var(--bg), #0a0b0f 35%, var(--bg) 100%);
+      display:flex; align-items:center; justify-content:center; padding:18px;
+    }
+    .wrap{width:100%; max-width:980px}
+    .panel{
+      background:var(--panel); border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden; border:1px solid rgba(124,92,255,.12)
+    }
+    .header{display:flex; gap:14px; align-items:center; justify-content:space-between; padding:18px 20px; border-bottom:1px solid rgba(124,92,255,.12)}
+    .title{display:flex; flex-direction:column}
+    .title h1{margin:0; font-size:18px; letter-spacing:.2px}
+    .title .sub{color:var(--muted); font-size:12px}
+    .streak{
+      display:flex; align-items:baseline; gap:8px; font-weight:700
+    }
+    .streak .num{font-size:28px; line-height:1; color:var(--accent)}
+    .streak .best{font-size:12px; color:var(--muted)}
+    .controls{display:flex; gap:8px; flex-wrap:wrap}
+    .btn{appearance:none; border:1px solid rgba(124,92,255,.3); background:transparent; color:var(--text); padding:8px 10px; border-radius:12px; cursor:pointer; font-size:12px}
+    .btn:hover{border-color:var(--accent)}
+    .btn.primary{background:var(--accent); border-color:var(--accent); color:white}
+    .btn.ghost{border-color:rgba(124,92,255,.18); color:var(--muted)}
+
+    .body{display:grid; grid-template-columns: 260px 1fr; min-height:420px}
+    @media (max-width:800px){ .body{grid-template-columns: 1fr} }
+
+    /* Sidebar */
+    .side{border-right:1px solid rgba(124,92,255,.12); padding:16px; display:flex; flex-direction:column; gap:12px}
+    .field{display:flex; gap:8px}
+    .field input{flex:1; background:#0d0f15; border:1px solid rgba(124,92,255,.25); color:var(--text); padding:10px 12px; border-radius:12px; outline:none}
+    .meta{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:6px}
+    .stat{background:linear-gradient(180deg, rgba(124,92,255,.12), rgba(124,92,255,.04)); border:1px solid rgba(124,92,255,.18); border-radius:12px; padding:10px}
+    .stat .label{font-size:11px; color:var(--muted)}
+    .stat .value{font-size:18px; font-weight:700}
+
+    .habits{display:flex; flex-wrap:wrap; gap:8px; margin-top:4px}
+    .chip{padding:7px 10px; border-radius:999px; border:1px solid rgba(124,92,255,.25); color:var(--text); cursor:pointer; font-size:12px}
+    .chip.active{background:rgba(124,92,255,.18); border-color:var(--accent)}
+
+    /* Calendar */
+    .cal{padding:18px}
+    .row{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px}
+    .month{font-weight:700}
+    .nav{display:flex; gap:8px}
+    .iconbtn{width:32px; height:32px; border-radius:10px; border:1px solid rgba(124,92,255,.25); background:transparent; color:var(--text); cursor:pointer}
+    .grid{display:grid; grid-template-columns: repeat(7, 1fr); gap:8px}
+    .dow{font-size:11px; color:var(--muted); text-align:center}
+    .day{
+      position:relative; border-radius:12px; border:1px dashed rgba(124,92,255,.2); padding:10px 0; text-align:center; min-height:54px; user-select:none; cursor:pointer; transition:.12s ease border-color, .12s ease background
+    }
+    .day .d{font-size:12px; color:var(--muted)}
+    .day .mark{display:inline-block; margin-top:6px; font-size:20px}
+    .day.past:hover{border-color:var(--accent)}
+    .day.completed{background:linear-gradient(180deg, rgba(124,92,255,.25), rgba(124,92,255,.12)); border-style:solid}
+    .day.today{outline:2px solid var(--accent); outline-offset:2px}
+    .day.future{opacity:.45; cursor:not-allowed}
+
+    .footer{display:flex; flex-wrap:wrap; gap:8px; padding:14px 18px; border-top:1px solid rgba(124,92,255,.12); color:var(--muted); font-size:12px}
+    .linklike{color:var(--accent); text-decoration:none; cursor:pointer}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="panel" id="app">
+    <div class="header">
+      <div class="title">
+        <h1 id="title">Habit / Streak Tracker</h1>
+        <div class="sub" id="subtitle">Click a day to toggle completion. Tracks streaks automatically.</div>
+      </div>
+      <div class="streak">
+        <span class="num" id="curStreak">0</span>
+        <span>day streak</span>
+        <span class="best" id="bestStreak">• best 0</span>
+      </div>
+      <div class="controls">
+        <button class="btn" id="toggleWeekStart">Week: Sun</button>
+        <button class="btn ghost" id="exportBtn">Export</button>
+        <button class="btn ghost" id="importBtn">Import</button>
+        <button class="btn" id="resetBtn" title="Only clears this habit's calendar">Clear</button>
+      </div>
+    </div>
+
+    <div class="body">
+      <aside class="side">
+        <div class="field">
+          <input id="habitInput" placeholder="Add a habit (e.g., Read 20m)" />
+          <button class="btn primary" id="addHabit">Add</button>
+        </div>
+        <div class="habits" id="habitChips"></div>
+        <div class="meta">
+          <div class="stat"><div class="label">Total days done</div><div class="value" id="totalDone">0</div></div>
+          <div class="stat"><div class="label">Completion this month</div><div class="value"><span id="monthPct">0</span>%</div></div>
+        </div>
+        <div class="meta">
+          <div class="stat"><div class="label">Current streak</div><div class="value" id="curStreakSide">0</div></div>
+          <div class="stat"><div class="label">Best streak</div><div class="value" id="bestStreakSide">0</div></div>
+        </div>
+      </aside>
+
+      <section class="cal">
+        <div class="row">
+          <div class="month" id="monthLabel">—</div>
+          <div class="nav">
+            <button class="iconbtn" id="prevBtn" aria-label="Previous month">◀</button>
+            <button class="iconbtn" id="todayBtn" aria-label="Jump to current month">●</button>
+            <button class="iconbtn" id="nextBtn" aria-label="Next month">▶</button>
+          </div>
+        </div>
+        <div class="grid" id="dow"></div>
+        <div class="grid" id="days"></div>
+      </section>
+    </div>
+
+    <div class="footer">
+      <span>Tip: Use URL params like <code>?title=Daily%20Habits&accent=%23FF4D4D&id=myboard</code>.</span>
+      <a class="linklike" id="howLink">How it works</a>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  // ---- Utilities ----
+  const qs = (s, el=document)=>el.querySelector(s);
+  const qsa= (s, el=document)=>Array.from(el.querySelectorAll(s));
+  const fmtMonth = (y,m)=> new Date(y,m,1).toLocaleString(undefined,{month:'long', year:'numeric'});
+  const today = new Date(); today.setHours(0,0,0,0);
+  const clampDay = (d)=>{ const x=new Date(d); x.setHours(0,0,0,0); return x; };
+  const iso = (d)=>{ const x = new Date(d); x.setHours(0,0,0,0); return x.toISOString().slice(0,10); };
+  const parseParams = ()=>{
+    const url = new URL(location.href);
+    return {
+      title: url.searchParams.get('title'),
+      accent: url.searchParams.get('accent'),
+      id: url.searchParams.get('id') || 'default',
+      weekStart: (url.searchParams.get('weekStart')||'sun').toLowerCase(), // sun|mon
+    };
+  };
+
+  const params = parseParams();
+  if(params.accent){ document.documentElement.style.setProperty('--accent', params.accent); }
+  if(params.title){ qs('#title').textContent = decodeURIComponent(params.title); }
+
+  const STORAGE_KEY = `hstw_v1_${params.id}`;
+  const defaultState = { habits: [ { id: crypto.randomUUID(), name: 'Daily Habit', days: {} } ], activeId: null, weekStart: (params.weekStart==='mon'?'mon':'sun') };
+  let state = load() || defaultState;
+  if(!state.activeId) state.activeId = state.habits[0].id;
+
+  function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+  function load(){ try{ return JSON.parse(localStorage.getItem(STORAGE_KEY)); }catch(e){ return null; } }
+  function activeHabit(){ return state.habits.find(h=>h.id===state.activeId) || state.habits[0]; }
+
+  // ---- DOM Refs ----
+  const chips = qs('#habitChips');
+  const input = qs('#habitInput');
+  const addBtn = qs('#addHabit');
+  const totalDoneEl = qs('#totalDone');
+  const monthPctEl = qs('#monthPct');
+  const curStreakEl = qs('#curStreak');
+  const bestStreakEl = qs('#bestStreak');
+  const curStreakSideEl = qs('#curStreakSide');
+  const bestStreakSideEl = qs('#bestStreakSide');
+  const toggleWeekStart = qs('#toggleWeekStart');
+
+  // Calendar
+  const daysWrap = qs('#days');
+  const dowWrap = qs('#dow');
+  const monthLabel = qs('#monthLabel');
+  const prevBtn = qs('#prevBtn');
+  const nextBtn = qs('#nextBtn');
+  const todayBtn = qs('#todayBtn');
+
+  // View month cursor
+  let view = { y: today.getFullYear(), m: today.getMonth() };
+
+  function setWeekStartLabel(){ toggleWeekStart.textContent = `Week: ${state.weekStart==='mon'?'Mon':'Sun'}`; }
+
+  function renderHabits(){
+    chips.innerHTML = '';
+    state.habits.forEach(h=>{
+      const el = document.createElement('button');
+      el.className = 'chip' + (h.id===state.activeId?' active':'');
+      el.textContent = h.name;
+      el.title = 'Click to select. Shift+Click to rename. Alt+Click to delete.';
+      el.addEventListener('click', (ev)=>{
+        if(ev.altKey){
+          if(confirm(`Delete habit “${h.name}”?`)){
+            state.habits = state.habits.filter(x=>x.id!==h.id);
+            if(state.habits.length===0){ state.habits=[{id:crypto.randomUUID(), name:'New Habit', days:{}}]; }
+            state.activeId = state.habits[0].id; save(); renderAll();
+          }
+          return;
+        }
+        if(ev.shiftKey){
+          const name = prompt('Rename habit:', h.name);
+          if(name && name.trim()){ h.name = name.trim(); save(); renderHabits(); }
+          return;
+        }
+        state.activeId = h.id; save(); renderAll();
+      });
+      chips.appendChild(el);
+    });
+  }
+
+  function addHabit(){
+    const name = (input.value||'').trim();
+    if(!name) return;
+    const h = { id: crypto.randomUUID(), name, days: {} };
+    state.habits.push(h); state.activeId = h.id; input.value=''; save(); renderAll();
+  }
+
+  function monthMatrix(y,m){
+    const first = new Date(y,m,1); const last = new Date(y,m+1,0);
+    const daysInMonth = last.getDate();
+    const weekStartIdx = (state.weekStart==='mon'?1:0);
+    const offset = ( (first.getDay() - weekStartIdx + 7) % 7 );
+    const cells = [];
+    // leading blanks
+    for(let i=0;i<offset;i++) cells.push(null);
+    for(let d=1; d<=daysInMonth; d++) cells.push(new Date(y,m,d));
+    return cells;
+  }
+
+  function renderCalendar(){
+    // DOW header
+    const namesSun = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const namesMon = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    const names = state.weekStart==='mon'?namesMon:namesSun;
+    dowWrap.innerHTML = names.map(n=>`<div class="dow">${n}</div>`).join('');
+
+    // Label
+    monthLabel.textContent = fmtMonth(view.y, view.m);
+
+    // Days
+    const cells = monthMatrix(view.y, view.m);
+    daysWrap.innerHTML = '';
+    const h = activeHabit();
+    const isThisMonth = (view.y===today.getFullYear() && view.m===today.getMonth());
+
+    cells.forEach((d)=>{
+      const cell = document.createElement('div');
+      cell.className = 'day';
+      if(d===null){ cell.style.visibility='hidden'; daysWrap.appendChild(cell); return; }
+      const key = iso(d);
+      const completed = !!h.days[key];
+
+      const fut = d>today;
+      const isToday = d.getTime()===today.getTime();
+      cell.classList.add(fut?'future':'past');
+      if(isToday) cell.classList.add('today');
+      if(completed) cell.classList.add('completed');
+
+      cell.innerHTML = `<div class="d">${d.getDate()}</div><div class="mark">${completed?'✓':''}</div>`;
+
+      if(!fut){
+        cell.addEventListener('click',()=>{
+          h.days[key] = h.days[key]?0:1; save(); updateStats();
+          // visual toggle
+          cell.classList.toggle('completed');
+          cell.querySelector('.mark').textContent = h.days[key]?'✓':'';
+          computeMonthPct();
+        });
+      }
+      daysWrap.appendChild(cell);
+    });
+
+    computeMonthPct();
+  }
+
+  function computeMonthPct(){
+    const h = activeHabit();
+    const first = new Date(view.y, view.m, 1);
+    const last = new Date(view.y, view.m+1, 0);
+    const totalDays = (clampDay(last) < today) ? last.getDate() : (today.getMonth()===view.m && today.getFullYear()===view.y ? today.getDate() : last.getDate());
+    let done=0;
+    for(let d=1; d<=totalDays; d++){
+      const k = iso(new Date(view.y, view.m, d));
+      if(h.days[k]) done++;
+    }
+    const pct = totalDays? Math.round(done/totalDays*100) : 0;
+    monthPctEl.textContent = pct;
+  }
+
+  function calcStreaks(h){
+    // current streak: consecutive days up to today inclusive
+    let cur=0; let best=0; let run=0;
+    // Walk backwards from today to oldest entry
+    const allKeys = Object.keys(h.days).sort();
+    if(allKeys.length===0) return {cur:0,best:0,total:0};
+    // Compute best by scanning sorted keys sequentially
+    let prev = null; let total=0;
+    for(const k of allKeys){ if(h.days[k]) total++; }
+
+    // Calculate best and also compute current
+    // We'll iterate from oldest to newest to find best; then compute current separately
+    // Best streak across all time
+    for(let i=0;i<allKeys.length;i++){
+      const k = allKeys[i]; if(!h.days[k]){ run=0; continue; }
+      const d = new Date(k);
+      if(prev){
+        const diff = (d - prev)/(1000*60*60*24);
+        if(diff===1){ run++; } else { run=1; }
+      } else { run=1; }
+      if(run>best) best=run; prev=d;
+    }
+
+    // Current streak up to today
+    let walker = new Date(today);
+    while(h.days[iso(walker)]){ cur++; walker.setDate(walker.getDate()-1); }
+
+    return {cur, best: Math.max(best, cur), total};
+  }
+
+  function updateStats(){
+    const h = activeHabit();
+    const s = calcStreaks(h);
+    curStreakEl.textContent = s.cur;
+    bestStreakEl.textContent = `• best ${s.best}`;
+    curStreakSideEl.textContent = s.cur;
+    bestStreakSideEl.textContent = s.best;
+    totalDoneEl.textContent = s.total;
+  }
+
+  function go(delta){
+    view.m += delta;
+    if(view.m<0){ view.m=11; view.y--; }
+    if(view.m>11){ view.m=0; view.y++; }
+    renderCalendar();
+  }
+
+  // ---- Events ----
+  addBtn.addEventListener('click', addHabit);
+  input.addEventListener('keydown', e=>{ if(e.key==='Enter') addHabit(); });
+  prevBtn.addEventListener('click', ()=>go(-1));
+  nextBtn.addEventListener('click', ()=>go(1));
+  todayBtn.addEventListener('click', ()=>{ view.y=today.getFullYear(); view.m=today.getMonth(); renderCalendar(); });
+  toggleWeekStart.addEventListener('click', ()=>{
+    state.weekStart = state.weekStart==='mon'?'sun':'mon'; save(); setWeekStartLabel(); renderCalendar();
+  });
+  qs('#resetBtn').addEventListener('click', ()=>{
+    const h = activeHabit();
+    if(confirm(`Clear all checkmarks for “${h.name}”?`)){
+      h.days = {}; save(); renderCalendar(); updateStats();
+    }
+  });
+
+  // Export / Import JSON
+  qs('#exportBtn').addEventListener('click', ()=>{
+    const data = JSON.stringify(state, null, 2);
+    const blob = new Blob([data], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `habit-tracker-${params.id}.json`; a.click();
+    URL.revokeObjectURL(url);
+  });
+  qs('#importBtn').addEventListener('click', async ()=>{
+    const input = document.createElement('input');
+    input.type='file'; input.accept='.json,application/json';
+    input.onchange = async ()=>{
+      const file = input.files[0]; if(!file) return;
+      try{
+        const txt = await file.text();
+        const obj = JSON.parse(txt);
+        if(!obj || !obj.habits) throw new Error('Invalid file');
+        state = obj; save(); renderAll();
+      }catch(err){ alert('Import failed: '+err.message); }
+    };
+    input.click();
+  });
+
+  qs('#howLink').addEventListener('click', ()=>{
+    alert('Tips:\n\n• Click a past day to mark complete. Today is highlighted. Future days are disabled.\n• Add multiple habits. Click a habit chip to switch. Shift+Click to rename. Alt+Click to delete.\n• Toggle week start (Sun/Mon).\n• Use URL params: ?title=Your%20Title&accent=%23FF4D4D&id=myboard&weekStart=mon\n• Data is saved in your browser localStorage only (per id). Use Export/Import to move/save data.');
+  });
+
+  function renderAll(){ setWeekStartLabel(); renderHabits(); renderCalendar(); updateStats(); }
+  renderAll();
+})();
+</script>
+</body>
+</html>
